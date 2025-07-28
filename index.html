@@ -262,53 +262,70 @@ function showAlert(message, isSuccess = true) {
   
 function loadUserData() {
   const user = tg.initDataUnsafe?.user;
+  const defaultAvatar = 'https://placehold.it/60x60';
   
-  if (user) {
-    // 1. Set name
-    const nameElement = document.getElementById('user-name');
-    if (nameElement) {
-      nameElement.textContent = user.first_name ? `Hello, ${user.first_name}` : "Welcome!";
-    }
+  // Always ensure elements exist before trying to modify them
+  const nameElement = document.getElementById('user-name');
+  const usernameElement = document.getElementById('user-username');
+  const avatarElement = document.getElementById('user-avatar');
+  const inviteLinkElement = document.getElementById('invite-link');
 
-    // 2. Set username with @
-    const usernameElement = document.getElementById('user-username');
-    if (usernameElement) {
-      usernameElement.textContent = user.username ? `@${user.username}` : "";
-    }
+  // Set fallbacks if elements don't exist (shouldn't happen but safety check)
+  if (!nameElement || !usernameElement || !avatarElement || !inviteLinkElement) {
+    console.error("Critical UI elements missing!");
+    return;
+  }
 
-    // 3. Set avatar with error handling
-    const avatar = document.getElementById('user-avatar');
-    if (avatar) {
-      avatar.onerror = function() {
-        this.src = 'https://placehold.it/60x60'; // Fallback if photo fails to load
-      };
-      avatar.src = user.photo_url || 'https://placehold.it/60x60';
-    }
+  // Handle case where no user data exists
+  if (!user) {
+    nameElement.textContent = "Welcome!";
+    usernameElement.textContent = "";
+    avatarElement.src = defaultAvatar;
+    inviteLinkElement.textContent = "Loading...";
+    console.warn("No Telegram user data available");
+    return;
+  }
 
-    // 4. Set invite link
-    const inviteLink = document.getElementById("invite-link");
-    if (inviteLink && user.id) {
-      inviteLink.textContent = `https://t.me/${botUsername}?start=${user.id}`;
-    }
+  // Set name (with fallback)
+  nameElement.textContent = user.first_name ? `Hello, ${user.first_name}` : "Welcome!";
+  
+  // Set username (with fallback)
+  usernameElement.textContent = user.username ? `@${user.username}` : "";
+
+  // Set avatar (with error handling)
+  avatarElement.onerror = function() {
+    this.src = defaultAvatar;
+  };
+  avatarElement.src = user.photo_url || defaultAvatar;
+
+  // Set invite link (with verification)
+  if (typeof botUsername === 'string' && botUsername.trim() && user.id) {
+    inviteLinkElement.textContent = `https://t.me/${botUsername.trim()}?start=${user.id}`;
   } else {
-    console.log("No user data available yet");
+    console.error("Invalid botUsername configuration:", botUsername);
+    inviteLinkElement.textContent = "Error: Contact support";
   }
 }
 
-// Initialize the app properly
+// Initialize the app
 tg.ready();
 tg.expand();
 
-// Try to load immediately, then check every 500ms if data isn't ready
+// First try to load immediately
 loadUserData();
-if (!tg.initDataUnsafe) {
-  const checkInterval = setInterval(() => {
-    if (tg.initDataUnsafe) {
-      loadUserData();
-      clearInterval(checkInterval);
-    }
-  }, 500);
-}
+
+// Set up fallback if data isn't ready
+let dataLoadAttempts = 0;
+const dataLoadInterval = setInterval(() => {
+  if (tg.initDataUnsafe?.user) {
+    clearInterval(dataLoadInterval);
+    loadUserData();
+  } else if (dataLoadAttempts++ > 10) { // Give up after 5 seconds (10 attempts)
+    clearInterval(dataLoadInterval);
+    console.warn("Failed to load user data after multiple attempts");
+    loadUserData(); // Still call to set fallback UI
+  }
+}, 500); 
 
   checkReferral();
   updatePoints();
