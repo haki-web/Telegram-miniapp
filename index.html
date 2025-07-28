@@ -27,6 +27,19 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+    
+.no-data {
+  color: #888;
+  padding: 20px;
+  text-align: center;
+}
+
+.error {
+  color: #ff4444;
+  padding: 20px;
+  text-align: center;
+}
+    
   </style>
 </head>
 <body>
@@ -174,28 +187,33 @@ function showAlert(message, isSuccess = true) {
   }
 
   async function loadLeaderboard() {
+  const list = document.getElementById("leaderboard-list");
+  
+  // Show loading spinner
+  list.innerHTML = '<div class="loading-spinner"></div>';
+  
   try {
-    const res = await fetch(`${API_URL}/leaderboard`);
-    const data = await res.json();
+    const response = await fetch(`${API_URL}/leaderboard`);
+    const data = await response.json();
     
-    let html = "";
-    if (data.leaderboard) {
-      data.leaderboard.forEach((u, index) => {
-        html += `
-          <li>
-            #${index + 1} ${u.username || u.user_id} 
-            - ${u.points} ⭐ 
-            ${u.referral_count ? `(${u.referral_count} referrals)` : ''}
-          </li>`;
-      });
+    // Check if data exists
+    if (!data.leaderboard || data.leaderboard.length === 0) {
+      list.innerHTML = '<div class="no-data">No one on leaderboard yet!</div>';
+      return;
     }
-    document.getElementById("leaderboard-list").innerHTML = html;
-  } catch (e) {
-    console.error("Leaderboard Error:", e);
-    document.getElementById("leaderboard-list").innerHTML = 
-      "<li>Failed to load leaderboard</li>";
+    
+    // Render leaderboard
+    let html = '';
+    data.leaderboard.forEach((user, index) => {
+      html += `<li>#${index+1} ${user.username || 'Anonymous'} - ${user.points}⭐</li>`;
+    });
+    list.innerHTML = html;
+    
+  } catch (error) {
+    list.innerHTML = '<div class="error">Failed to load leaderboard</div>';
+    console.error("Leaderboard error:", error);
   }
-  }
+}
 
   function copyInviteLink() {
   const link = document.getElementById("invite-link").textContent;
