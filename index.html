@@ -64,6 +64,17 @@
 </div>
 
 <script>
+  // Expand the WebApp to full height
+tg.expand();
+
+// Handle theme changes
+tg.onEvent('themeChanged', () => {
+  document.body.setAttribute('data-theme', tg.colorScheme);
+});
+
+// Set initial theme
+document.body.setAttribute('data-theme', tg.colorScheme);
+  
   const API_URL = "https://telegram-miniapp-backend-ivory.vercel.app/";
   const botUsername = "Tg_mini2_bot"; 
 
@@ -78,27 +89,51 @@
   }
 
   async function addPoints(amount) {
-    const userId = tg.initDataUnsafe?.user?.id?.toString() || "guest";
-    await fetch(`${API_URL}/add_points`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ user_id:userId, amount:amount })
+  const userId = tg.initDataUnsafe?.user?.id?.toString();
+  if (!userId) return alert("User not authorized!");
+  
+  try {
+    const response = await fetch(`${API_URL}/add_points`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, amount: amount })
     });
-    updatePoints();
-    alert(`+${amount} points added!`);
+    
+    const result = await response.json();
+    
+    if (result.status === "ok") {
+      await updatePoints(); // Refresh points
+      alert(`+${amount} points added! New balance: ${points}`);
+    } else {
+      alert("Error: " + (result.message || "Failed to add points"));
+    }
+  } catch (e) {
+    console.error("Add Points Error:", e);
+    alert("Network error - please try again");
+  }
   }
 
   async function updatePoints() {
-    const userId = tg.initDataUnsafe?.user?.id?.toString() || "guest";
-    try {
-      const res = await fetch(`${API_URL}/points/${userId}`);
-      const data = await res.json();
-      points = data.points;
-      document.getElementById("user-points").textContent = points;
-      document.getElementById("balance-points").textContent = points;
-    } catch (e) {
-      console.error("Point Fetch Error", e);
+  const userId = tg.initDataUnsafe?.user?.id?.toString();
+  if (!userId) return;
+
+  try {
+    const res = await fetch(`${API_URL}/points/${userId}`);
+    const data = await res.json();
+    
+    if (data.status === "ok") {
+      points = data.points || 0;
+    } else {
+      points = 0;
     }
+    
+    document.getElementById("user-points").textContent = points;
+    document.getElementById("balance-points").textContent = points;
+  } catch (e) {
+    console.error("Point Fetch Error", e);
+    document.getElementById("user-points").textContent = "Error";
+    document.getElementById("balance-points").textContent = "Error";
+  }
   }
 
   function updateBalance() {
@@ -106,11 +141,27 @@
   }
 
   async function loadLeaderboard() {
+  try {
     const res = await fetch(`${API_URL}/leaderboard`);
     const data = await res.json();
+    
     let html = "";
-    data.forEach(u => html += `<li>${u.user_id} - ${u.points} ⭐</li>`);
+    if (data.leaderboard) {
+      data.leaderboard.forEach((u, index) => {
+        html += `
+          <li>
+            #${index + 1} ${u.username || u.user_id} 
+            - ${u.points} ⭐ 
+            ${u.referral_count ? `(${u.referral_count} referrals)` : ''}
+          </li>`;
+      });
+    }
     document.getElementById("leaderboard-list").innerHTML = html;
+  } catch (e) {
+    console.error("Leaderboard Error:", e);
+    document.getElementById("leaderboard-list").innerHTML = 
+      "<li>Failed to load leaderboard</li>";
+  }
   }
 
   function copyInviteLink() {
@@ -118,23 +169,34 @@
     navigator.clipboard.writeText(link).then(() => alert("✅ Invite Link Copied!"));
   }
 
-  function checkReferral() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const referrerId = urlParams.get("start");
-    const newUserId = tg.initDataUnsafe?.user?.id?.toString();
-    if (referrerId && newUserId && referrerId !== newUserId) {
-      console.log("✅ Referral API Call:", referrerId, "→", newUserId);
-      fetch(`${API_URL}/referral`, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ user_id:referrerId, referral_id:newUserId })
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Referral response:", data);
-        updatePoints();
+  async function checkReferral() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const referrerId = urlParams.get("start");
+  const newUserId = tg.initDataUnsafe?.user?.id?.toString();
+  
+  if (referrerId && newUserId && referrerId !== newUserId) {
+    try {
+      const response = await fetch(`${API_URL}/referral`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          user_id: referrerId, 
+          referral_id: newUserId 
+        })
       });
+      
+      const result = await response.json();
+      console.log("Referral result:", result);
+      
+      if (result.status === "ok") {
+        // Show success message only if this is a new referral
+        alert("🎉 Welcome! You joined via referral");
+      }
+      await updatePoints(); // Refresh points
+    } catch (e) {
+      console.error("Referral Error:", e);
     }
+  }
   }
 
   
