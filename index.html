@@ -115,8 +115,9 @@
 </div>
 
 <script>
-  // Expand the WebApp to full height
-tg.expand();
+  const tg = window.Telegram.WebApp;  // ✅ Must come FIRST
+tg.ready();                         // ✅ Then make sure it's ready
+tg.expand();                        // ✅ Then you can expand
 
 // Handle theme changes
 tg.onEvent('themeChanged', () => {
@@ -125,13 +126,12 @@ tg.onEvent('themeChanged', () => {
 
 // Set initial theme
 document.body.setAttribute('data-theme', tg.colorScheme);
-  
-  const API_URL = "https://telegram-miniapp-backend-ivory.vercel.app/";
-  const botUsername = "Tg_mini2_bot"; 
 
-  let points = 0;
-  const tg = window.Telegram.WebApp;
-  tg.ready();
+// Define backend and bot info
+const API_URL = "https://telegram-miniapp-backend-ivory.vercel.app/";
+const botUsername = "Tg_mini2_bot"; 
+
+let points = 0;
   
 function showAlert(message, isSuccess = true) {
   const alertEl = document.createElement('div');
