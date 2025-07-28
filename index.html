@@ -1,55 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Telegram Mini App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #121212;
-      color: #fff;
-      text-align: center;
-      padding: 40px;
-    }
-    button {
-      background-color: #00bfa6;
-      border: none;
-      padding: 15px 25px;
-      color: white;
-      font-size: 18px;
-      border-radius: 8px;
-      cursor: pointer;
-    }
+    body { margin:0; font-family:Arial; background:#121212; color:#fff; text-align:center; }
+    .section { display:none; padding:20px; }
+    .section.active { display:block; }
+    .nav { position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:space-around; background:#1f1f1f; padding:10px; }
+    .nav button { background:#007bff; color:#fff; border:none; padding:10px 15px; border-radius:8px; }
+    .user-info { display:flex; justify-content:center; align-items:center; margin-top:15px; }
+    .user-info img { border-radius:50%; width:50px; height:50px; margin-right:10px; }
+    .leaderboard { margin-left: 20px;}
+    #leaderboard-list li { list-style:none; padding:5px; border-bottom:1px solid #444; }
   </style>
 </head>
 <body>
-  <h1>Welcome, <span id="username">User</span> 👋</h1>
-  <p>Your Telegram ID: <span id="userId">-</span></p>
-  <button onclick="sendData()">Start</button>
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    const user = tg.initDataUnsafe.user;
+<div id="home" class="section active">
+  <div class="user-info">
+    <img id="user-avatar" src="https://placehold.it/60x60">
+    <div>
+      <div id="user-name">Loading...</div>
+      <div id="user-username"></div>
+    </div>
+    <div>
+      <button onclick="showSection('leaderboard');loadLeaderboard()">🏆 Leaderboard</button>
+    </div>
+  </div>
+  <h3>⭐ Points: <span id="user-points">0</span></h3>
+</div>
 
-    document.getElementById('username').innerText = user?.first_name || 'User';
-    document.getElementById('userId').innerText = user?.id || '-';
+<div id="earn" class="section">
+  <h3>Earn Points</h3>
+  <button onclick="addPoints(50)">+50 Points</button>
+</div>
 
-    async function sendData() {
-      const res = await fetch('/api/main', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: user?.id,
-          name: user?.first_name,
-          username: user?.username,
-        }),
-      });
+<div id="referral" class="section">
+  <h3>Referral</h3>
+  <div>Invite your friends:</div>
+  <div id="invite-link" style="word-break:break-all;margin:10px 0;"></div>
+  <button onclick="copyInviteLink()">Copy Invite Link</button>
+</div>
 
+<div id="balance" class="section">
+  <h3>💳 Your Balance</h3>
+  <p>Total Points: <span id="balance-points">0</span> ⭐</p>
+</div>
+
+<div id="leaderboard" class="section">
+  <h3>🏆 Leaderboard</h3>
+  <ul id="leaderboard-list"></ul>
+</div>
+
+<div class="nav">
+  <button onclick="showSection('home')">🏠 Home</button>
+  <button onclick="showSection('earn')">💰 Earn</button>
+  <button onclick="showSection('referral')">👥 Referral</button>
+  <button onclick="showSection('balance');updateBalance()">💳 Balance</button>
+  
+</div>
+
+<script>
+  const API_URL = "https://telegram-miniapp-backend-ivory.vercel.app/";
+  const botUsername = "Tg_mini2_bot"; 
+
+  let points = 0;
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+
+  function showSection(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id === "home") updatePoints();
+  }
+
+  async function addPoints(amount) {
+    const userId = tg.initDataUnsafe?.user?.id?.toString() || "guest";
+    await fetch(`${API_URL}/add_points`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ user_id:userId, amount:amount })
+    });
+    updatePoints();
+    alert(`+${amount} points added!`);
+  }
+
+  async function updatePoints() {
+    const userId = tg.initDataUnsafe?.user?.id?.toString() || "guest";
+    try {
+      const res = await fetch(`${API_URL}/points/${userId}`);
       const data = await res.json();
-      alert(data.message || 'Response received');
+      points = data.points;
+      document.getElementById("user-points").textContent = points;
+      document.getElementById("balance-points").textContent = points;
+    } catch (e) {
+      console.error("Point Fetch Error", e);
     }
-  </script>
+  }
+
+  function updateBalance() {
+    document.getElementById("balance-points").textContent = points;
+  }
+
+  async function loadLeaderboard() {
+    const res = await fetch(`${API_URL}/leaderboard`);
+    const data = await res.json();
+    let html = "";
+    data.forEach(u => html += `<li>${u.user_id} - ${u.points} ⭐</li>`);
+    document.getElementById("leaderboard-list").innerHTML = html;
+  }
+
+  function copyInviteLink() {
+    const link = document.getElementById("invite-link").textContent;
+    navigator.clipboard.writeText(link).then(() => alert("✅ Invite Link Copied!"));
+  }
+
+  function checkReferral() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const referrerId = urlParams.get("start");
+    const newUserId = tg.initDataUnsafe?.user?.id?.toString();
+    if (referrerId && newUserId && referrerId !== newUserId) {
+      console.log("✅ Referral API Call:", referrerId, "→", newUserId);
+      fetch(`${API_URL}/referral`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ user_id:referrerId, referral_id:newUserId })
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log("Referral response:", data);
+        updatePoints();
+      });
+    }
+  }
+
+  
+  const user = tg.initDataUnsafe?.user;
+  if (user) {
+    document.getElementById('user-name').textContent = `Hello, ${user.first_name}`;
+    document.getElementById('user-username').textContent = `@${user.username || 'No Username'}`;
+    document.getElementById('user-avatar').src = user.photo_url || 'https://placehold.it/60x60';
+    document.getElementById("invite-link").textContent =
+      `https://t.me/${botUsername}?start=${user.id}`;
+  }
+
+  checkReferral();
+  updatePoints();
+</script>
+
 </body>
 </html>
