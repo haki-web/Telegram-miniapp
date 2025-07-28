@@ -229,15 +229,62 @@ function showAlert(message, isSuccess = true) {
   }
   }
 
+  console.log("Debug - Telegram User Data:", {
+  id: tg.initDataUnsafe?.user?.id,
+  name: tg.initDataUnsafe?.user?.first_name,
+  username: tg.initDataUnsafe?.user?.username,
+  photo: tg.initDataUnsafe?.user?.photo_url
+});
   
+function loadUserData() {
   const user = tg.initDataUnsafe?.user;
+  
   if (user) {
-    document.getElementById('user-name').textContent = `Hello, ${user.first_name}`;
-    document.getElementById('user-username').textContent = `@${user.username || 'No Username'}`;
-    document.getElementById('user-avatar').src = user.photo_url || 'https://placehold.it/60x60';
-    document.getElementById("invite-link").textContent =
-      `https://t.me/${botUsername}?start=${user.id}`;
+    // 1. Set name
+    const nameElement = document.getElementById('user-name');
+    if (nameElement) {
+      nameElement.textContent = user.first_name ? `Hello, ${user.first_name}` : "Welcome!";
+    }
+
+    // 2. Set username with @
+    const usernameElement = document.getElementById('user-username');
+    if (usernameElement) {
+      usernameElement.textContent = user.username ? `@${user.username}` : "";
+    }
+
+    // 3. Set avatar with error handling
+    const avatar = document.getElementById('user-avatar');
+    if (avatar) {
+      avatar.onerror = function() {
+        this.src = 'https://placehold.it/60x60'; // Fallback if photo fails to load
+      };
+      avatar.src = user.photo_url || 'https://placehold.it/60x60';
+    }
+
+    // 4. Set invite link
+    const inviteLink = document.getElementById("invite-link");
+    if (inviteLink && user.id) {
+      inviteLink.textContent = `https://t.me/${botUsername}?start=${user.id}`;
+    }
+  } else {
+    console.log("No user data available yet");
   }
+}
+
+// Initialize the app properly
+tg.ready();
+tg.expand();
+
+// Try to load immediately, then check every 500ms if data isn't ready
+loadUserData();
+if (!tg.initDataUnsafe) {
+  const checkInterval = setInterval(() => {
+    if (tg.initDataUnsafe) {
+      loadUserData();
+      clearInterval(checkInterval);
+    }
+  }, 500);
+}
 
   checkReferral();
   updatePoints();
