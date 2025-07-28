@@ -324,24 +324,6 @@ function initApp() {
 // Start everything
 initApp();
 </script>
-  <script>
-  window.Telegram.WebApp.ready();
-
-  const user = window.Telegram.WebApp.initDataUnsafe?.user;
-
-  if (user) {
-    document.getElementById("user-name").textContent = user.first_name + (user.last_name ? " " + user.last_name : "");
-    document.getElementById("user-username").textContent = user.username ? "@" + user.username : "";
-    document.getElementById("user-avatar").src = user.photo_url || "https://placehold.it/60x60";
-    
-    // Set referral link
-    const referralLink = `https://t.me/${window.Telegram.WebApp.initDataUnsafe.receiver?.username || 'YourBotUsername'}?start=${user.id}`;
-    document.getElementById("invite-link").textContent = referralLink;
-    document.getElementById("invite-link").href = referralLink;
-  } else {
-    document.getElementById("user-name").textContent = "User not found";
-  }
-  </script>
-
+  
 </body>
 </html>
