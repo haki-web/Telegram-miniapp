@@ -19,6 +19,21 @@
   min-height: 1em;
   display: block;
 }
+/* Add to your existing styles */
+#invite-link:empty::before {
+  content: "Loading...";
+  color: #888;
+}
+
+#leaderboard-list {
+  min-height: 100px;
+  position: relative;
+}
+
+.loading-spinner + button {
+  margin-top: 15px;
+  background: #444;
+}
    #invite-link {
      color: #007bff; 
      padding: 10px;
@@ -199,32 +214,36 @@ function showAlert(message, isSuccess = true) {
 
   async function loadLeaderboard() {
   const list = document.getElementById("leaderboard-list");
-  
-  // Show loading spinner
   list.innerHTML = '<div class="loading-spinner"></div>';
-  
+
   try {
-    const response = await fetch(`${API_URL}/leaderboard`);
+    const response = await fetch(`${API_URL}/leaderboard`, {
+      signal: AbortSignal.timeout(5000) // 5 second timeout
+    });
+    
+    if (!response.ok) throw new Error("Server error");
+    
     const data = await response.json();
     
-    // Check if data exists
-    if (!data.leaderboard || data.leaderboard.length === 0) {
-      list.innerHTML = '<div class="no-data">No one on leaderboard yet!</div>';
+    if (!data?.leaderboard?.length) {
+      list.innerHTML = '<div class="no-data">No leaderboard data yet</div>';
       return;
     }
     
-    // Render leaderboard
-    let html = '';
-    data.leaderboard.forEach((user, index) => {
-      html += `<li>#${index+1} ${user.username || 'Anonymous'} - ${user.points}⭐</li>`;
-    });
-    list.innerHTML = html;
+    list.innerHTML = data.leaderboard.map((user, i) => 
+      `<li>#${i+1} ${user.username || 'Anonymous'} - ${user.points}⭐</li>`
+    ).join('');
     
   } catch (error) {
-    list.innerHTML = '<div class="error">Failed to load leaderboard</div>';
     console.error("Leaderboard error:", error);
+    list.innerHTML = `
+      <div class="error">
+        Failed to load leaderboard<br>
+        <button onclick="loadLeaderboard()">Retry</button>
+      </div>
+    `;
   }
-}
+  }
 
   function copyInviteLink() {
   const link = document.getElementById("invite-link").textContent;
@@ -269,40 +288,40 @@ function loadUserData() {
   const user = tg.initDataUnsafe?.user || {};
   const defaultAvatar = 'https://placehold.it/60x60';
   
-  // Always set these values (no conditions)
-  document.getElementById('user-name').textContent = 
-    user.first_name || "Welcome!";
-  
-  document.getElementById('user-username').textContent = 
-    user.username ? `@${user.username}` : "";
+  // Force-set all values
+  document.getElementById('user-name').textContent = user.first_name || "Welcome";
+  document.getElementById('user-username').textContent = user.username ? `@${user.username}` : "";
   
   const avatar = document.getElementById('user-avatar');
   avatar.onerror = () => avatar.src = defaultAvatar;
   avatar.src = user.photo_url || defaultAvatar;
   
-  // ALWAYS set an invite link (even if empty)
+  // GUARANTEED to show either link or error
   document.getElementById('invite-link').textContent = 
-    user.id ? `https://t.me/${botUsername}?start=${user.id}` : "Loading...";
-}
+    user.id ? `https://t.me/${botUsername}?start=${user.id}` 
+           : "Error: Couldn't load referral link";
+    }
   
-// Initialize the app PROPERLY
+// Initialize the app
 function initApp() {
   tg.ready();
   tg.expand();
   
-  // Load user data immediately if available
-  if (tg.initDataUnsafe?.user) {
-    loadUserData();
-  } else {
-    // Fallback for when data isn't ready
-    setTimeout(loadUserData, 300);
-  }
-  
-  checkReferral();
+  // First try
+  loadUserData();
   updatePoints();
+  checkReferral();
+  
+  // Fallback in case Telegram is slow
+  setTimeout(() => {
+    if (!tg.initDataUnsafe?.user) {
+      console.warn("Using fallback user data load");
+      loadUserData();
+    }
+  }, 1000);
 }
 
-// START THE APP
+// Start everything
 initApp();
 </script>
 
