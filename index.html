@@ -2,164 +2,257 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Telegram Mini App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #121212;
-      color: #fff;
-      text-align: center;
+    body { margin:0; font-family:Arial; background:#121212; color:#fff; text-align:center; }
+    .section { display:none; padding:20px; }
+    .section.active { display:block; }
+    .nav { position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:space-around; background:#1f1f1f; padding:10px; }
+    .nav button { background:#007bff; color:#fff; border:none; padding:10px 15px; border-radius:8px; }
+    .user-info { display:flex; justify-content:center; align-items:center; margin-top:15px; }
+    .user-info img { border-radius:50%; width:50px; height:50px; margin-right:10px; }
+    #leaderboard-list li { list-style:none; padding:5px; border-bottom:1px solid #444; }
+    #user-name, #user-username { min-height: 1em; display: block; }
+    #invite-link:empty::before { content: "Loading..."; color: #888; }
+    #leaderboard-list { min-height: 100px; }
+    .loading-spinner {
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s ease-in-out infinite;
+      margin: 0 auto;
     }
-    .container {
-      padding: 20px;
-    }
-    .balance {
-      font-size: 24px;
-      margin: 10px 0;
-    }
-    .btn {
-      background-color: #0f9d58;
-      color: white;
-      border: none;
-      padding: 12px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 8px;
-      margin-top: 10px;
-    }
-    .leaderboard {
-      margin-top: 30px;
-    }
-    .leaderboard h2 {
-      margin-bottom: 10px;
-    }
-    .leaderboard ul {
-      list-style: none;
-      padding: 0;
-    }
-    .leaderboard li {
-      background: #1e1e1e;
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .no-data { color: #888; padding: 20px; }
+    .error { color: #ff4444; padding: 20px; }
+    #invite-link {
+      color: #007bff;
       padding: 10px;
-      margin: 5px;
-      border-radius: 6px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      margin: 10px 0;
+      word-break: break-word;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🎥 Watch & Earn</h1>
-    <div class="balance" id="points">Points: ...</div>
-    <div class="balance" id="referrals">Referrals: ...</div>
-    <button class="btn" onclick="claimPoints()">✅ Claim 10 Points</button>
-    
-    <div class="leaderboard">
-      <h2>🏆 Leaderboard</h2>
-      <ul id="leaderboard-list"></ul>
+
+<div id="home" class="section active">
+  <div class="user-info">
+    <img id="user-avatar" src="https://placehold.it/60x60" alt="User Avatar" />
+    <div>
+      <div id="user-name">Loading...</div>
+      <div id="user-username"></div>
+    </div>
+    <div>
+      <button onclick="showSection('leaderboard'); loadLeaderboard()">🏆 Leaderboard</button>
     </div>
   </div>
+  <h3>⭐ Points: <span id="user-points">0</span></h3>
+</div>
 
-  <script>
-    const tg = window.Telegram.WebApp;
+<div id="earn" class="section">
+  <h3>Earn Points</h3>
+  <button onclick="addPoints(50)">+50 Points</button>
+</div>
+
+<div id="referral" class="section">
+  <h3>Referral</h3>
+  <div>Invite your friends:</div>
+  <div id="invite-link"></div>
+  <button onclick="copyInviteLink()">Copy Invite Link</button>
+</div>
+
+<div id="balance" class="section">
+  <h3>💳 Your Balance</h3>
+  <p>Total Points: <span id="balance-points">0</span> ⭐</p>
+</div>
+
+<div id="leaderboard" class="section">
+  <h3>🏆 Leaderboard</h3>
+  <ul id="leaderboard-list"></ul>
+</div>
+
+<div class="nav">
+  <button onclick="showSection('home')">🏠 Home</button>
+  <button onclick="showSection('earn')">💰 Earn</button>
+  <button onclick="showSection('referral')">👥 Referral</button>
+  <button onclick="showSection('balance'); updateBalance()">💳 Balance</button>
+</div>
+
+<script>
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+
+  // Theme handling
+  tg.onEvent('themeChanged', () => {
+    document.body.setAttribute('data-theme', tg.colorScheme);
+  });
+  document.body.setAttribute('data-theme', tg.colorScheme);
+
+  const API_URL = "https://telegram-miniapp-backend-ivory.vercel.app/";
+  const botUsername = "Tg_mini2_bot";
+
+  let points = 0;
+
+  function showAlert(message, isSuccess = true) {
+    const alertEl = document.createElement('div');
+    alertEl.style.position = 'fixed';
+    alertEl.style.top = '20px';
+    alertEl.style.left = '50%';
+    alertEl.style.transform = 'translateX(-50%)';
+    alertEl.style.padding = '12px 24px';
+    alertEl.style.background = isSuccess ? '#4CAF50' : '#F44336';
+    alertEl.style.color = 'white';
+    alertEl.style.borderRadius = '8px';
+    alertEl.style.zIndex = '1000';
+    alertEl.textContent = message;
+    document.body.appendChild(alertEl);
+    setTimeout(() => alertEl.remove(), 3000);
+  }
+
+  function showSection(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id === "home") updatePoints();
+  }
+
+  async function addPoints(amount) {
+    const userId = tg.initDataUnsafe?.user?.id?.toString();
+    if (!userId) {
+      showAlert("User not authorized!", false);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/add_points`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, amount: amount })
+      });
+      const result = await response.json();
+      if (result.status === "ok") {
+        await updatePoints();
+        showAlert(`+${amount} points added! New balance: ${points}`);
+      } else {
+        showAlert("Error: " + (result.message || "Failed to add points"), false);
+      }
+    } catch (e) {
+      console.error("Add Points Error:", e);
+      showAlert("Network error - please try again", false);
+    }
+  }
+
+  async function updatePoints() {
+    const userId = tg.initDataUnsafe?.user?.id?.toString();
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_URL}/points/${userId}`);
+      const data = await res.json();
+      if (data.status === "ok") {
+        points = data.points || 0;
+      } else {
+        points = 0;
+      }
+      document.getElementById("user-points").textContent = points;
+      document.getElementById("balance-points").textContent = points;
+    } catch (e) {
+      console.error("Point Fetch Error", e);
+      document.getElementById("user-points").textContent = "Error";
+      document.getElementById("balance-points").textContent = "Error";
+    }
+  }
+
+  function updateBalance() {
+    document.getElementById("balance-points").textContent = points;
+  }
+
+  async function loadLeaderboard() {
+    const list = document.getElementById("leaderboard-list");
+    list.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+      const response = await fetch(`${API_URL}/leaderboard`, {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (!response.ok) throw new Error("Server error");
+      const data = await response.json();
+      if (!data?.leaderboard?.length) {
+        list.innerHTML = '<div class="no-data">No leaderboard data yet</div>';
+        return;
+      }
+      list.innerHTML = data.leaderboard.map((user, i) =>
+        `<li>#${i + 1} ${user.username || 'Anonymous'} - ${user.points}⭐</li>`
+      ).join('');
+    } catch (error) {
+      console.error("Leaderboard error:", error);
+      list.innerHTML = `
+        <div class="error">
+          Failed to load leaderboard<br>
+          <button onclick="loadLeaderboard()">Retry</button>
+        </div>`;
+    }
+  }
+
+  function copyInviteLink() {
+    const link = document.getElementById("invite-link").textContent;
+    navigator.clipboard.writeText(link)
+      .then(() => showAlert("Invite link copied!"))
+      .catch(() => showAlert("Failed to copy link", false));
+  }
+
+  async function checkReferral() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const referrerId = urlParams.get("start");
+    const newUserId = tg.initDataUnsafe?.user?.id?.toString();
+
+    if (referrerId && newUserId && referrerId !== newUserId) {
+      try {
+        const response = await fetch(`${API_URL}/referral`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: referrerId, referral_id: newUserId })
+        });
+        const result = await response.json();
+        if (result.status === "ok") {
+          showAlert(`🎉 Referral recorded! You earned ${result.reward} points.`);
+          await updatePoints();
+        } else if (result.status === "error") {
+          // Optional: show error alert only if meaningful
+          console.warn("Referral not processed:", result.message);
+        }
+      } catch (e) {
+        console.error("Referral Error:", e);
+      }
+    }
+  }
+
+  function loadUserData() {
+    const user = tg.initDataUnsafe?.user || {};
+    const defaultAvatar = 'https://placehold.it/60x60';
+
+    document.getElementById('user-name').textContent = user.first_name || "Welcome";
+    document.getElementById('user-username').textContent = user.username ? `@${user.username}` : "";
+
+    const avatar = document.getElementById('user-avatar');
+    avatar.onerror = () => avatar.src = defaultAvatar;
+    avatar.src = user.photo_url || defaultAvatar;
+
+    document.getElementById('invite-link').textContent =
+      user.id ? `https://t.me/${botUsername}?start=${user.id}`
+              : "Error: Couldn't load referral link";
+  }
+
+  function initApp() {
+    tg.ready();
     tg.expand();
-
-    const API_URL = "https://telegram-miniapp-backend-ivory.vercel.app";
-
-    const userId = tg.initDataUnsafe?.user?.id?.toString() || "test_user";
-    const username = tg.initDataUnsafe?.user?.username || "Anonymous";
-
-    async function updateUserInfo() {
-      try {
-        const res = await fetch(`${API_URL}/points/${userId}`);
-        const data = await res.json();
-
-        if (data.status === "ok") {
-          document.getElementById("points").innerText = `Points: ${data.points}`;
-          document.getElementById("referrals").innerText = `Referrals: ${data.referral_count}`;
-        }
-      } catch (e) {
-        console.error("Error fetching user info", e);
-      }
-    }
-
-    async function claimPoints() {
-      try {
-        const res = await fetch(`${API_URL}/add_points`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            amount: 10
-          })
-        });
-
-        const data = await res.json();
-        if (data.status === "ok") {
-          alert(`✅ You earned 10 points! New Balance: ${data.new_balance}`);
-          updateUserInfo();
-        } else {
-          alert("❌ Failed to claim points");
-        }
-      } catch (e) {
-        console.error("Error claiming points", e);
-      }
-    }
-
-    async function submitReferral(referralId) {
-      try {
-        const res = await fetch(`${API_URL}/referral`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: referralId,
-            referral_id: userId
-          })
-        });
-
-        const data = await res.json();
-        if (data.status === "ok") {
-          alert(`🎉 Referral successful! Referrer earned ${data.reward} points`);
-          updateUserInfo();
-        } else {
-          console.warn("Referral not accepted:", data.message);
-        }
-      } catch (e) {
-        console.error("Referral error", e);
-      }
-    }
-
-    async function loadLeaderboard() {
-      try {
-        const res = await fetch(`${API_URL}/leaderboard`);
-        const data = await res.json();
-
-        if (data.status === "ok") {
-          const list = document.getElementById("leaderboard-list");
-          list.innerHTML = "";
-          data.leaderboard.forEach((user, index) => {
-            const li = document.createElement("li");
-            li.textContent = `#${index + 1} @${user.username} — ${user.points} pts`;
-            list.appendChild(li);
-          });
-        }
-      } catch (e) {
-        console.error("Leaderboard error", e);
-      }
-    }
-
-    // Load everything
-    window.onload = () => {
-      updateUserInfo();
-      loadLeaderboard();
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const ref = urlParams.get("ref");
-      if (ref && ref !== userId) {
-        submitReferral(ref);
-      }
-    };
-  </script>
-</body>
-</html>
+    loadUserData();
+    updatePoints();
+    checkReferral();
+    setTimeout(() => {
+      if (!tg.initDataUnsafe?.user) {
+        console.warn("Fallback
